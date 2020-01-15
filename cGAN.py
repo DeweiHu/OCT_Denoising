@@ -211,7 +211,8 @@ class Discriminator(nn.Module):
                 nn.BatchNorm2d(512)
                 )
         self.Out = nn.Sequential(
-                nn.Linear(32*32*512,1),
+                nn.Linear(batch_size*32*32*512,100),
+                nn.Linear(100,batch_size),
                 nn.Sigmoid()
                 )
     def forward(self,input):
@@ -225,16 +226,21 @@ netD = Discriminator(gpu).to(device)
 netD.apply(weight_init)
 
 #%% Loss functions and optimizers
-loss = nn.BCELoss()
+BCE_loss = nn.BCELoss()
+L1_loss = nn.L1Loss()
+MSE_loss = nn.MSELoss()
+
 
 real_label = 1
 fake_label = 0
 
 # Adam optimizers
 beta1 = 0.5
-lr = 0.0002
+lr = 0.00003
 optimizerG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1,0.999))
 optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1,0.999))
+schedulerG = StepLR(optimizerG, step_size=3, gamma=0.5)
+schedulerD = StepLR(optimizerD, step_size=3, gamma=0.5)
 
 #%% Training 
 import time
@@ -243,7 +249,9 @@ img_list = []
 G_losses = []
 D_losses = []
 iters = 0
-num_epoch = 30
+num_epoch = 50
+
+alpha = 3
 
 print('Training process start:')
 
@@ -254,25 +262,26 @@ for epoch in range(num_epoch):
         # The discriminator is exclusively pre-trained 
         netD.zero_grad()
         
-        real_data_y = train_y.to(device)
-        real_data_x = train_x.to(device)
-        b_size = real_data_y.size(0)  # Get batch size
-        label = torch.full((b_size,), real_label, device=device)
+        x = Variable(train_x).to(device)
+        y = Variable(train_y).to(device)
+        label = torch.full((batch_size,), real_label, device=device)
         
         # [1] Pre-train the discriminator with real image
-        input = torch.cat([real_data_x,real_data_y],dim=1)
-        output = netD(input).view(-1)
-        D_error_real = loss(output,label)
+        real_pair = torch.cat([x,y],dim=1)
+        output = netD(real_pair).view(-1)
+        
+        D_error_real = BCE_loss(output,label)
         D_error_real.backward()
         D_x = output.mean().item()    # D(x)
         
         # [2] Pre-train the discriminator with fake image
-        fake = netG(real_data_x)
+        fake_y = netG(x)
         label.fill_(fake_label)
         
-        input = torch.cat([real_data_x,fake],dim=1)
-        output = netD(input.detach()).view(-1)  # detach from netG, only update netD
-        D_error_fake = loss(output,label)
+        fake_pair = torch.cat([x,fake_y],dim=1)
+        output = netD(fake_pair.detach()).view(-1)  # detach from netG, only update netD
+        
+        D_error_fake = BCE_loss(output,label)
         D_error_fake.backward()
         D_G_z1 = output.mean().item()  # D(G(z))
         
@@ -282,31 +291,36 @@ for epoch in range(num_epoch):
 
         #####  {Part 2} Generator: max{log(D(G(z)))}  #####
         netG.zero_grad()
-        label.fill_(real_label)    #*use real_label to realize maximization
+        label.fill_(real_label)    # Generator want D(G(z)) close to 1
         
-        output = netD(input).view(-1)
-        G_error = loss(output,label)
+        output = netD(fake_pair).view(-1)
+        
+        G_error = BCE_loss(output,label)+alpha*L1_loss(fake_y,y)+MSE_loss(fake_y,y)
         G_error.backward()
-
         D_G_z2 = output.mean().item()
         optimizerG.step()
         
         # Viusualization
         if step % 300 == 0:
+ #           print(D_error_fake)
             print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
                   %(epoch, num_epoch, step, len(train_loader), D_error.item(), 
                     G_error.item(), D_x, D_G_z1, D_G_z2))
             
         if step == 0:
-            fake = netG(real_data_x).detach().cpu().numpy()
-            gt = real_data_y.detach().cpu().numpy()
-            img_fake = np.transpose(np.squeeze(fake,axis=0)[0,:,:])
-            img_gt = np.transpose(np.squeeze(gt,axis=0)[0,:,:])
+            fake = netG(x).detach().cpu().numpy()
+            gt = y.detach().cpu().numpy()
+            img = x.detach().cpu().numpy()
             
-            plt.figure(figsize=(12,8))
+            img_fake = np.transpose(fake[0,0,:,:])
+            img_gt = np.transpose(gt[0,0,:,:])
+            img_x = np.transpose(img[0,0,:,:])
+            
+            plt.figure(figsize=(15,8))
             plt.axis("off")
-            plt.subplot(1,2,1),plt.imshow(img_fake)
-            plt.subplot(1,2,2),plt.imshow(img_gt)
+            plt.subplot(1,3,2),plt.imshow(img_fake)
+            plt.subplot(1,3,3),plt.imshow(img_gt)
+            plt.subplot(1,3,1),plt.imshow(img_x)
             plt.show()
         
         G_losses.append(G_error.item())
@@ -319,24 +333,5 @@ print('Time used:',(t2-t1)/60,' min')
 #for step, [x,y] in enumerate(train_loader):
 #    input = torch.cat([x,y],dim=1)
 #opt = netD(input)
-#%% Anistropic diffusion + Canny edge
 
-#x_nii = nib.load(dataroot+file_x)
-#x = np.array(x_nii.dataobj)
-#
-#y_nii = nib.load(dataroot+file_y)
-#y = np.array(y_nii.dataobj)
-#        
-#img_x = cw90(x[:,:,500])
-#img_y = cw90(y[:,:,100])
-#img_smooth_1 = anisotropic_diffusion(img_y,niter=30,option=1)
-#img_smooth_2 = anisotropic_diffusion(img_y,niter=30,option=2)
-#img_smooth_3 = anisotropic_diffusion(img_y,niter=30,option=3)
-#
-#edge_smooth = feature.canny(img_smooth_2)
-#edge_y = feature.canny(img_y)
-#
-#plt.figure(figsize=(12,8))
-#plt.subplot(1,2,1),plt.imshow(edge_y)
-#plt.subplot(1,2,2),plt.imshow(edge_smooth)
-#plt.show()
+
