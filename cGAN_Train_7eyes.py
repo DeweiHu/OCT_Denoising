@@ -21,10 +21,11 @@ from torch.autograd import Variable
 
 print('Loading data...')
 
-global dataroot, file_x, file_y
 dataroot = '/home/hud4/Desktop/2020/Data/'
-file_x = 'volume_x.npy'
-file_y = 'volume_y.npy'
+train_x = 'train_x.npy'
+train_y = 'train_y.npy'
+test_x = 'test_x.npy'
+test_y = 'test_y.npy'
 
 #%% Train dataset and dataloader formation
 print('Creating dataset...')
@@ -32,7 +33,7 @@ print('Creating dataset...')
 batch_size = 1
 gpu = 1
 
-class Train_Dataset(Data.Dataset):
+class MyDataset(Data.Dataset):
 
     def cw90(self, img):
         [r,c] = img.shape
@@ -48,10 +49,10 @@ class Train_Dataset(Data.Dataset):
 #        y_tensor = torch.squeeze(y_tensor,dim=0)
         return x_tensor, y_tensor    
         
-    def __init__(self):
+    def __init__(self, x_dir, y_dir):
         self.pair = ()
-        self.train_data = np.load(dataroot+file_x)      #[3500,3,512,512]
-        self.train_label = np.load(dataroot+file_y)     #[512,512,3500]
+        self.train_data = np.load(x_dir)      #[3500,3,512,512]
+        self.train_label = np.load(y_dir)     #[512,512,3500]
         self.num = self.train_data.shape[0]
         
         for i in range(self.num):
@@ -68,7 +69,11 @@ class Train_Dataset(Data.Dataset):
         x_tensor, y_tensor = self.ToTensor(image, mask)
         return x_tensor, y_tensor
     
-train_loader = Data.DataLoader(dataset=Train_Dataset(), batch_size=batch_size, shuffle=True)
+train_loader = Data.DataLoader(dataset=MyDataset(dataroot+train_x,dataroot+train_y), 
+                               batch_size=batch_size, shuffle=True)
+
+test_loader = Data.DataLoader(dataset=MyDataset(dataroot+test_x,dataroot+test_y),
+                              batch_size=batch_size, shuffle=True)
 
 device = torch.device("cuda:0" if( torch.cuda.is_available() and gpu>0 ) else "cpu")
 
@@ -232,11 +237,11 @@ fake_label = 0
 
 # Adam optimizers
 beta1 = 0.5
-lr = 0.00003
+lr = 0.00002
 optimizerG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1,0.999))
 optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1,0.999))
-schedulerG = StepLR(optimizerG, step_size=3, gamma=0.5)
-schedulerD = StepLR(optimizerD, step_size=3, gamma=0.5)
+schedulerG = StepLR(optimizerG, step_size=1, gamma=0.5)
+schedulerD = StepLR(optimizerD, step_size=1, gamma=0.5)
 
 #%% Training 
 import time
@@ -244,16 +249,16 @@ import time
 img_list = []
 G_losses = []
 D_losses = []
-iters = 0
-num_epoch = 50
+num_epoch = 10
 
-alpha = 3
+alpha = 5
 
 print('Training process start:')
 
 t1 = time.time()
 for epoch in range(num_epoch):
     for step,[train_x,train_y] in enumerate(train_loader):
+        
         #####  {Part 1} Discriminator: max{log(D(x))+log(1-D(G(z)))}  #####
         # The discriminator is exclusively pre-trained 
         netD.zero_grad()
@@ -304,20 +309,29 @@ for epoch in range(num_epoch):
                     G_error.item(), D_x, D_G_z1, D_G_z2))
             
         if step == 0:
-            fake = netG(x).detach().cpu().numpy()
-            gt = y.detach().cpu().numpy()
-            img = x.detach().cpu().numpy()
+            # Train data denoising
+            denoise_train = netG(x).detach().cpu().numpy()
+            noise_train = train_x.numpy()
+            avg_train = train_y.numpy()
             
-            img_fake = np.transpose(fake[0,0,:,:])
-            img_gt = np.transpose(gt[0,0,:,:])
-            img_x = np.transpose(img[0,0,:,:])
+            # Test data denoising
+            for test_x, test_y in test_loader:
+                ipt_x = test_x.to(device)
+                denoise_test = netG(ipt_x).detach().cpu().numpy()
+                noise_test = test_x.numpy()
+                avg_test = test_y.numpy()
+                
+            plt.figure(figsize=(18,15))
+            plt.subplot(2,3,1),plt.imshow(noise_train[0,0,:,:]),plt.title('noisy')
+            plt.subplot(2,3,2),plt.imshow(denoise_train[0,0,:,:]),plt.title('denoised')
+            plt.subplot(2,3,3),plt.imshow(avg_train[0,0,:,:]),plt.title('5-average')
             
-            plt.figure(figsize=(15,8))
-            plt.axis("off")
-            plt.subplot(1,3,2),plt.imshow(img_fake)
-            plt.subplot(1,3,3),plt.imshow(img_gt)
-            plt.subplot(1,3,1),plt.imshow(img_x)
+            plt.subplot(2,3,4),plt.imshow(noise_test[0,0,:,:])
+            plt.subplot(2,3,5),plt.imshow(denoise_test[0,0,:,:])
+            plt.subplot(2,3,6),plt.imshow(avg_test[0,0,:,:])
             plt.show()
+            
+            
         
         G_losses.append(G_error.item())
         D_losses.append(D_error.item())
