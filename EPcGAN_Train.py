@@ -35,14 +35,6 @@ gpu = 1
 
 class MyDataset(Data.Dataset):
 
-    def cw90(self, img):
-        [r,c] = img.shape
-        opt = np.zeros([c,r])
-        for i in range(r):
-            vector = np.transpose(img[i,:])
-            opt[:,r-i-1] = vector
-        return np.uint8(opt)
-    
     def ToTensor(self, image, mask):
         x_tensor = torch.tensor(image).type(torch.FloatTensor)
         y_tensor = transforms.functional.to_tensor(mask)
@@ -58,7 +50,7 @@ class MyDataset(Data.Dataset):
         for i in range(self.num):
             # Add gradient map as a prior
             x = self.train_data[i,:,:,:]
-            y = self.cw90(self.train_label[:,:,i])
+            y = self.train_label[:,:,i]
             self.pair = self.pair+((x,y),)
 
     def __len__(self):
