@@ -338,6 +338,12 @@ for epoch in range(num_epoch):
 
 t2 = time.time()
 print('Time used:',(t2-t1)/60,' min')
-    
+
+#%% Save model as GPU version
+modelroot = '/home/hud4/Desktop/2020/Model/'
+G_name = 'EP_cGAN_generator.pt'
+D_name = 'Ep_cGAN_discriminator.pt'
+torch.save(netG.state_dict(), modelroot+G_name)
+torch.save(netD.state_dict(), modelroot+D_name)
     
     
