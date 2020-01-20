@@ -30,14 +30,6 @@ gpu = 1
 
 class MyDataset(Data.Dataset):
 
-    def cw90(self, img):
-        [r,c] = img.shape
-        opt = np.zeros([c,r])
-        for i in range(r):
-            vector = np.transpose(img[i,:])
-            opt[:,r-i-1] = vector
-        return np.uint8(opt)
-    
     def ToTensor(self, image, mask):
         x_tensor = torch.tensor(image).type(torch.FloatTensor)
         y_tensor = transforms.functional.to_tensor(mask)
@@ -53,7 +45,7 @@ class MyDataset(Data.Dataset):
         for i in range(self.num):
             # Add gradient map as a prior
             x = self.train_data[i,:,:,:]
-            y = self.cw90(self.train_label[:,:,i])
+            y = self.train_label[:,:,i]
             self.pair = self.pair+((x,y),)
 
     def __len__(self):
@@ -185,6 +177,17 @@ average_volume = np.zeros(shape).astype(np.float32)
 noisy_volume = np.zeros(shape).astype(np.float32)
 
 #%% Run the model
+import time
+
+def cw90(img):
+    [r,c] = img.shape
+    opt = np.zeros([c,r])
+    for i in range(r):
+        vector = np.transpose(img[i,:])
+        opt[:,r-i-1] = vector
+    return opt
+
+t1 = time.time()
 with torch.no_grad():
     for step, [x,y] in enumerate(test_loader):
         test_x = Variable(x).to(device)
@@ -193,17 +196,19 @@ with torch.no_grad():
         average = y.numpy()
         noisy = x.detach().cpu().numpy()
         
-        denoise_volume[:,:,step] = denoise[0,0,:,:]
-        average_volume[:,:,step] = average[0,0,:,:]
-        noisy_volume[:,:,step] = noisy[0,0,:,:]
+        denoise_volume[:,:,step] = np.fliplr(denoise[0,0,:,:])
+        average_volume[:,:,step] = np.fliplr(average[0,0,:,:])
+        noisy_volume[:,:,step] = np.fliplr(noisy[0,0,:,:])
         
         if step % 30 == 0:
             plt.figure(figsize=(15,8))
-            plt.subplot(1,3,1),plt.imshow(noisy[0,0,:,:],cmap='gray')
-            plt.subplot(1,3,2),plt.imshow(denoise[0,0,:,:],cmap='gray')
-            plt.subplot(1,3,3),plt.imshow(average[0,0,:,:],cmap='gray')
+            plt.subplot(1,3,1),plt.imshow(cw90(noisy[0,0,:,:]),cmap='gray')
+            plt.subplot(1,3,2),plt.imshow(cw90(denoise[0,0,:,:]),cmap='gray')
+            plt.subplot(1,3,3),plt.imshow(cw90(average[0,0,:,:]),cmap='gray')
             plt.show()
+t2 = time.time()
 
+print('Time used: ', t2-t1,'s')
 #%% Save the volume as nii
 import os
 def save_nii(volume,path,filename):
