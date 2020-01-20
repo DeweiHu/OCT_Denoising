@@ -98,7 +98,7 @@ class Train_Dataset(Data.Dataset):
             x = np.expand_dims(x,axis=0)
             x = np.concatenate((x,edge_x),axis=0)
             # find correspondance
-            idx = np.int(np.floor(i/5))
+            idx = np.int(np.floor(i/n_channel))
             y = self.train_label[:,:,idx]
             self.pair = self.pair+((x,y),)
             
@@ -337,7 +337,7 @@ for epoch in range(num_epoch):
         
         output = netD(fake_pair).view(-1)
         
-        G_error = BCE_loss(output,label)+alpha*L1_loss(fake_y,y)+MSE_loss(fake_y,y)
+        G_error = BCE_loss(output,label)+alpha*L1_loss(fake_y,y)#+MSE_loss(fake_y,y)
         G_error.backward()
         D_G_z2 = output.mean().item()
         optimizerG.step()
@@ -371,10 +371,11 @@ for epoch in range(num_epoch):
 t2 = time.time()
 print('Time used:',(t2-t1)/60,' min')
 
-#%%
-for step,[x,y] in enumerate(train_loader):
-    x = x
-    y = y
-
+#%% Save model as GPU version
+modelroot = '/home/hud4/Desktop/2020/Model/'
+G_name = 'Multiscale_cGAN_generator.pt'
+D_name = 'Multiscale_cGAN_discriminator.pt'
+torch.save(netG.state_dict(), modelroot+G_name)
+torch.save(netD.state_dict(), modelroot+D_name)
 
 
