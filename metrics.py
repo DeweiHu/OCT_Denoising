@@ -7,7 +7,6 @@ Created on Mon Feb  3 14:51:57 2020
 """
 
 import nibabel as nib
-from scipy.stats import signaltonoise
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -28,9 +27,9 @@ denoise_img = np.array(denoise_nii.dataobj)
 #%%
 slc = 250
 
-im0 = noisy_img[:,:,slc]
-im1 = aver_img[:,:,slc]
-im2 = denoise_img[:,:,slc]
+im0 = noisy_img[100:300,200:400,slc]
+im1 = aver_img[100:300,200:400,slc]
+im2 = denoise_img[100:300,200:400,slc]
 
 plt.figure(figsize=(15,12))
 plt.subplot(1,3,1),plt.imshow(im0,cmap='gray')
@@ -47,7 +46,23 @@ import math
 MSE = np.square(np.subtract(im1,im2)).mean()
 PSNR = 10*math.log10(np.square(im2.max())/MSE)
 
-#%% SSIM
+#%%   SSIM
 from skimage.measure import compare_ssim
 
-(score,diff) = compare_ssim(im0,im2,full=True)
+(score,diff) = compare_ssim(im0,im1,full=True)
+
+#%%   CNR
+def CNR(Sa,Sb):
+    diff = abs(Sa.mean()-Sb.mean())
+    std = np.std(Sb)
+    return diff/std
+
+pnois_0 = noisy_img[:100,:100,slc]
+pnois_1 = aver_img[:100,:100,slc]
+pnois_2 = denoise_img[:100,:100,slc]
+
+psig_0 = noisy_img[100:150,200:250,slc]
+psig_1 = aver_img[100:150,200:250,slc]
+psig_2 = denoise_img[100:150,200:250,slc] 
+
+
