@@ -14,14 +14,13 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 import torch.utils.data as Data
-import torchvision.datasets as Dataset
 import torchvision.transforms as transforms
 from torch.optim.lr_scheduler import StepLR
 from torch.autograd import Variable
 
 print('Loading data...')
 
-dataroot = '/home/hud4/Desktop/2020/Data/'
+dataroot = '/sdc/Prepared/'
 train_x = 'train_x.npy'
 train_y = 'train_y.npy'
 test_x = 'test_x.npy'
@@ -135,6 +134,8 @@ class Generator(nn.Module):
         self.dual_u4 = dual_block(64)          # [64,512,512] 
         
         self.up_0 = up_block(64,64)
+        self.up_01 = up_block(128,64)
+        
         self.Out = nn.Sequential(
                 nn.Conv2d(in_channels=128,out_channels=64,kernel_size=1),
                 nn.Conv2d(in_channels=64,out_channels=1,kernel_size=1),
@@ -174,7 +175,8 @@ class Generator(nn.Module):
         x = torch.add(x,self.dual_u4(x))
         x = self.relu(x)
         
-        x = torch.cat([x,self.up_0(layer_1)],dim=1)
+        att = torch.cat([layer_1,self.up_01(layer_2)],dim=1)
+        x = torch.cat([x,self.up_01(att)],dim=1)
         output = self.Out(x)
         
         return output
@@ -205,8 +207,8 @@ class Discriminator(nn.Module):
                 nn.LeakyReLU(0.2),
                 )
         self.Out = nn.Sequential(
-                nn.Linear(batch_size*32*32*512,100),
-                nn.Linear(100,batch_size),
+                nn.Linear(32*32*512,100),
+                nn.Linear(100,1),
                 nn.Sigmoid()
                 )
     def forward(self,input):
@@ -229,7 +231,7 @@ fake_label = 0
 
 # Adam optimizers
 beta1 = 0.5
-lr = 0.00002
+lr = 1e-5
 optimizerG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1,0.999))
 optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1,0.999))
 schedulerG = StepLR(optimizerG, step_size=1, gamma=0.5)
@@ -241,9 +243,10 @@ import time
 img_list = []
 G_losses = []
 D_losses = []
-num_epoch = 10
+num_epoch = 15
 
 alpha = 5
+beta = 10
 
 print('Training process start:')
 
@@ -258,6 +261,8 @@ def cw90(img):
 t1 = time.time()
 for epoch in range(num_epoch):
     for step,[train_x,train_y] in enumerate(train_loader):
+        
+        netG.train()
         
         #####  {Part 1} Discriminator: max{log(D(x))+log(1-D(G(z)))}  #####
         # The discriminator is exclusively pre-trained 
@@ -296,7 +301,7 @@ for epoch in range(num_epoch):
         
         output = netD(fake_pair).view(-1)
         
-        G_error = BCE_loss(output,label)+alpha*L1_loss(fake_y,y)+MSE_loss(fake_y,y)
+        G_error = BCE_loss(output,label)+alpha*L1_loss(fake_y,y)+beta*MSE_loss(fake_y,y)
         G_error.backward()
         D_G_z2 = output.mean().item()
         optimizerG.step()
@@ -307,41 +312,51 @@ for epoch in range(num_epoch):
             print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
                   %(epoch, num_epoch, step, len(train_loader), D_error.item(), 
                     G_error.item(), D_x, D_G_z1, D_G_z2))
+            print('BCE_loss: %.4f\tL1_loss: %.4f\tL2_loss: %.4f'
+                  %(BCE_loss(output,label).item(),alpha*L1_loss(fake_y,y).item(),beta*MSE_loss(fake_y,y).item()))
             
         if step == 0:
-            # Train data denoising
-            denoise_train = netG(x).detach().cpu().numpy()
-            noise_train = train_x.numpy()
-            avg_train = train_y.numpy()
-            
-            # Test data denoising
-            for test_x, test_y in test_loader:
-                ipt_x = test_x.to(device)
-                denoise_test = netG(ipt_x).detach().cpu().numpy()
-                noise_test = test_x.numpy()
-                avg_test = test_y.numpy()
+            with torch.no_grad():
                 
-            plt.figure(figsize=(18,15))
-            plt.subplot(2,3,1),plt.imshow(cw90(noise_train[0,0,:,:]),cmap='gray'),plt.title('noisy')
-            plt.subplot(2,3,2),plt.imshow(cw90(denoise_train[0,0,:,:]),cmap='gray'),plt.title('denoised')
-            plt.subplot(2,3,3),plt.imshow(cw90(avg_train[0,0,:,:]),cmap='gray'),plt.title('5-average')
+                netG.eval()
+                
+                # Train data denoising
+                denoise_train = netG(x).detach().cpu().numpy()
+                noise_train = train_x.numpy()
+                avg_train = train_y.numpy()
             
-            plt.subplot(2,3,4),plt.imshow(cw90(noise_test[0,0,:,:]),cmap='gray'),plt.title('noisy')
-            plt.subplot(2,3,5),plt.imshow(cw90(denoise_test[0,0,:,:]),cmap='gray'),plt.title('denoised')
-            plt.subplot(2,3,6),plt.imshow(cw90(avg_test[0,0,:,:]),cmap='gray'),plt.title('5-average')
-            plt.show()
+                # Test data denoising
+                for test_x, test_y in test_loader:
+                    ipt_x = test_x.to(device)
+                    denoise_test = netG(ipt_x).detach().cpu().numpy()
+                    noise_test = test_x.numpy()
+                    avg_test = test_y.numpy()
+                
+                plt.figure(figsize=(18,15))
+                plt.subplot(2,3,1),plt.imshow(cw90(noise_train[0,0,:,:]),cmap='gray'),plt.title('noisy')
+                plt.subplot(2,3,2),plt.imshow(cw90(denoise_train[0,0,:,:]),cmap='gray'),plt.title('denoised')
+                plt.subplot(2,3,3),plt.imshow(cw90(avg_train[0,0,:,:]),cmap='gray'),plt.title('5-average')
+            
+                plt.subplot(2,3,4),plt.imshow(cw90(noise_test[0,0,:,:]),cmap='gray'),plt.title('noisy')
+                plt.subplot(2,3,5),plt.imshow(cw90(denoise_test[0,0,:,:]),cmap='gray'),plt.title('denoised')
+                plt.subplot(2,3,6),plt.imshow(cw90(avg_test[0,0,:,:]),cmap='gray'),plt.title('5-average')
+                plt.show()
             
         G_losses.append(G_error.item())
         D_losses.append(D_error.item())
+    
+    # Upodate lr
+    schedulerG.step()
+    schedulerD.step()
 
 t2 = time.time()
 print('Time used:',(t2-t1)/60,' min')
 
 #%% Save model as GPU version
-modelroot = '/home/hud4/Desktop/2020/Model/'
-G_name = 'EP_cGAN_generator.pt'
-D_name = 'Ep_cGAN_discriminator.pt'
-torch.save(netG.state_dict(), modelroot+G_name)
-torch.save(netD.state_dict(), modelroot+D_name)
+#modelroot = '/home/hud4/Desktop/2020/Model/'
+#G_name = 'EP_cGAN_generator.pt'
+#D_name = 'Ep_cGAN_discriminator.pt'
+#torch.save(netG.state_dict(), modelroot+G_name)
+#torch.save(netD.state_dict(), modelroot+D_name)
     
     
