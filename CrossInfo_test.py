@@ -74,15 +74,21 @@ class Packer:
             data_x_crop = self.Center_Crop(data_x[:,:,i*num_frame],im_size)
             data_y_crop = self.Center_Crop(data_y[:,:,i],im_size)
             # get gradient map
-#            diffuse_1 = anisotropic_diffusion(data_crop,niter=15,option=2).astype(np.uint8)
-            diffuse = anisotropic_diffusion(data_y_crop,niter=30,option=2).astype(np.uint8)
+            diffuse_1 = anisotropic_diffusion(data_x_crop,niter=15,option=2).astype(np.uint8)
+            diffuse_2 = anisotropic_diffusion(data_x_crop,niter=30,option=2).astype(np.uint8)
             
-#            gradient_1 = self.Sobel(diffuse_1,3)
-            gradient = self.Sobel(diffuse,3)
+            gradient_1 = self.Sobel(diffuse_1,3)
+            gradient_2 = self.Sobel(diffuse_2,3)
+            
+            # Threshold
+            bg_1 = gradient_1[400:500,0:100]
+            bg_2 = gradient_2[400:500,0:100]
+            gradient_1[gradient_1<bg_1.mean()+25] = 0
+            gradient_2[gradient_2<bg_2.mean()+25] = 0
             
             self.pack[i,0,:,:] = data_x_crop
-            self.pack[i,1,:,:] = diffuse
-            self.pack[i,2,:,:] = gradient
+            self.pack[i,1,:,:] = gradient_1
+            self.pack[i,2,:,:] = gradient_2
             
         t2 = time.time()
         print('Processing time: ',np.int(t2-t1),'s')
@@ -139,3 +145,14 @@ for i in range(len(x_list)-num_volume):
 np.save(saveroot+'cross_test_x',test_x)
 np.save(saveroot+'cross_test_y',test_y)
 
+#%% Single nii testing
+x = np.zeros([500,3,512,512],dtype=np.float32)
+y = np.zeros([512,512,500],dtype=np.uint8)
+
+x = Packer('/sdc/MoreData/','2019-07-03-001_OD_V_6x6_0_0000053_structure.nii',
+           '2019-07-03-001_OD_V_6x6_0_0000053_structure_5avg.nii',512)
+y_nii = nib.load('/sdc/MoreData/'+'2019-07-03-001_OD_V_6x6_0_0000053_structure_5avg.nii') 
+y = Crop3d(np.array(y_nii.dataobj),512)
+
+np.save(saveroot+'cross_mice_test_x.npy',x.pack)
+np.save(saveroot+'cross_mice_test_y.npy',y)
