@@ -28,7 +28,7 @@ device = torch.device("cuda:0" if( torch.cuda.is_available() and gpu>0 ) else "c
 
 global radius, root 
 
-radius = 5
+radius = 7
 root = '/home/hud4/Desktop/2020/Data/'
 
 #%% Dataloader
@@ -51,7 +51,7 @@ class MyDataset(Data.Dataset):
         self.size = self.volume.shape
         
         for i in range(self.size[2]):
-            if i > 5 and i < self.size[2]-5 :
+            if i > radius and i < self.size[2]-radius :
                 y = self.volume[:,:,i]
                 for j in range(radius):
                     x_pre = self.volume[:,:,i-j]
