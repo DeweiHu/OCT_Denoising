@@ -10,26 +10,78 @@ import sys
 sys.path.insert(0,'/home/hud4/Desktop/2020/VoxelMorph/')
 
 import numpy as np
-import math
+import matplotlib.pyplot as plt
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.utils.data as Data
+
+from torch.autograd import Variable
+from torch.optim.lr_scheduler import StepLR
 from torch.distributions.normal import Normal
 
 import losses
 
-
+gpu = 1
 device = torch.device("cuda:0" if( torch.cuda.is_available() and gpu>0 ) else "cpu")
 
+global radius, root 
+
+radius = 5
+root = '/home/hud4/Desktop/2020/Data/'
+
+#%% Dataloader
+print('Creating dataset...')
+
+batch_size = 1
+
+class MyDataset(Data.Dataset):
+    
+    def ToTensor(self, image, mask):
+        x_tensor = torch.tensor(image).type(torch.FloatTensor)
+        x_tensor = torch.unsqueeze(x_tensor,dim=0)
+        y_tensor = torch.tensor(mask).type(torch.FloatTensor)
+        y_tensor = torch.unsqueeze(y_tensor,dim=0)
+        return x_tensor, y_tensor
+    
+    def __init__(self, data_dir):
+        self.pair = ()
+        self.volume = np.load(data_dir)
+        self.size = self.volume.shape
+        
+        for i in range(self.size[2]):
+            if i > 5 and i < self.size[2]-5 :
+                y = self.volume[:,:,i]
+                for j in range(radius):
+                    x_pre = self.volume[:,:,i-j]
+                    x_post = self.volume[:,:,i+j]
+                    self.pair = self.pair+((x_pre,y),(x_post,y),)
+    
+    def __len__(self):
+        return len(self.pair)
+    
+    def __getitem__(self,idx):
+        (m_img,f_img) = self.pair[idx]
+        x_tensor, y_tensor = self.ToTensor(m_img, f_img)
+        return x_tensor, y_tensor        
+                    
+train_loader = Data.DataLoader(dataset=MyDataset(root+'reg_x.npy'),
+                               batch_size=batch_size, shuffle=True)
 
 #%%
+#for step,[x,y] in enumerate(train_loader):
+#    pass
+
+#%%
+print('Initializing model...')    
+
 class conv_block(nn.Module):
     """
     [Input] (dim, in_channels, out_channels, stride)
     [Output] single convolution block
     """
-    def __init__(self, dim, in_channels, out_channels, stride):
+    def __init__(self, dim, in_channels, out_channels, stride=1):
         super(conv_block, self).__init__()
         
         conv_fn = getattr(nn,"Conv{0}d".format(dim))
@@ -195,21 +247,76 @@ class cvpr2018_net(nn.Module):
         
         return y, flow
 
-#%%
+#%% Training Process
+print('Training start...')
+
+vol_size = [512,512]    
 enc_nf = [16,32,32,32]
 dec_nf = [32,32,32,32,8,8]
+num_epoch = 20
+reg_param = 100
+
+def cw90(img):
+    [r,c] = img.shape
+    opt = np.zeros([c,r])
+    for i in range(r):
+        vector = np.transpose(img[i,:])
+        opt[:,r-i-1] = vector
+    return opt
 
 model = cvpr2018_net(vol_size, enc_nf, dec_nf)
 model.to(device)
 
 # Set optimizer
 from torch.optim import Adam
-opt = Adam(model.parameters(), lr=1e-4)
+
+optimizer = Adam(model.parameters(), lr=1e-4, weight_decay=1e-5)
+scheduler = StepLR(optimizer, step_size=1, gamma=0.5)
+
+
 
 sim_loss_fn = losses.mse_loss
 grad_loss_fn = losses.gradient_loss
+
+for epoch in range(num_epoch):
+    for step, [m_img,f_img] in enumerate(train_loader):
         
+        model.train()
         
+        x = Variable(m_img).to(device)
+        y = Variable(f_img).to(device)
+        
+        warp, flow = model(x,y)
+        
+        recon_loss = sim_loss_fn(warp, y)
+        grad_loss = grad_loss_fn(flow)
+        loss = recon_loss + reg_param*grad_loss
+        
+        if step % 500 == 0:
+            print("[%d/%d]\t[%d/%d]\tLoss:%f\tSIM_Loss:%f\tSM_Loss:%f" %(epoch,num_epoch,step,len(train_loader),
+                  loss.item(), recon_loss.item(), grad_loss.item()), flush=True)
+        
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+        
+        if step == 0 and epoch != 0:
+            with torch.no_grad():
+                
+                model.eval()
+                
+                fix_img = f_img.numpy()
+                mov_img = m_img.numpy()
+                reg_img = warp.detach().cpu().numpy()
+                
+                plt.figure(figsize=(18,15))
+                plt.subplot(1,3,1),plt.imshow(cw90(fix_img[0,0,:,:]),cmap='gray'),plt.title('Fixed image')
+                plt.subplot(1,3,2),plt.imshow(cw90(reg_img[0,0,:,:]),cmap='gray'),plt.title('Registered')
+                plt.subplot(1,3,3),plt.imshow(cw90(mov_img[0,0,:,:]),cmap='gray'),plt.title('Moving image')
+                plt.show()
+        
+    scheduler.step()
+                
         
             
 
