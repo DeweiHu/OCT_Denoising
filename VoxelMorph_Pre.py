@@ -73,3 +73,5 @@ data = nii_loader(dataroot,x_list[0])
 v = PickFrame(data, num_frame)
 
 plt.imshow(cw90(v[:,:,0]),cmap='gray')
+
+np.save(saveroot+'reg_x.npy',v)
