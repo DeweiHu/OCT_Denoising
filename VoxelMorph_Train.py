@@ -9,6 +9,7 @@ Created on Wed Feb 26 15:41:04 2020
 import sys
 sys.path.insert(0,'/home/hud4/Desktop/2020/VoxelMorph/')
 
+import os
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -26,15 +27,26 @@ import losses
 gpu = 1
 device = torch.device("cuda:0" if( torch.cuda.is_available() and gpu>0 ) else "cpu")
 
-global radius, root 
+global radius, root, num_volume
 
-radius = 7
-root = '/home/hud4/Desktop/2020/Data/'
+radius = 5
+num_volume = 8
+root = '/home/hud4/Desktop/2020/VoxelMorph/Prepared_Volumes/'
+
+namelist = []
+
+for file in os.listdir(root):
+    if file.endswith('.npy'):
+        namelist.append(file)
+
+namelist.sort()
+x_list = namelist[:num_volume]
+y_list = namelist[num_volume:]
 
 #%% Dataloader
 print('Creating dataset...')
 
-batch_size = 1
+batch_size = 5
 
 class MyDataset(Data.Dataset):
     
@@ -45,18 +57,20 @@ class MyDataset(Data.Dataset):
         y_tensor = torch.unsqueeze(y_tensor,dim=0)
         return x_tensor, y_tensor
     
-    def __init__(self, data_dir):
+    def __init__(self, dir_list):
         self.pair = ()
-        self.volume = np.load(data_dir)
-        self.size = self.volume.shape
         
-        for i in range(self.size[2]):
-            if i > radius and i < self.size[2]-radius :
-                y = self.volume[:,:,i]
-                for j in range(radius):
-                    x_pre = self.volume[:,:,i-j]
-                    x_post = self.volume[:,:,i+j]
-                    self.pair = self.pair+((x_pre,y),(x_post,y),)
+        for vol in range(len(dir_list)):   
+            self.volume = np.load(root+dir_list[vol])
+            self.size = self.volume.shape
+        
+            for i in range(self.size[2]):
+                if i > radius and i < self.size[2]-radius :
+                    y = self.volume[:,:,i]
+                    for j in range(radius):
+                        x_pre = self.volume[:,:,i-j]
+                        x_post = self.volume[:,:,i+j]
+                        self.pair = self.pair+((x_pre,y),(x_post,y),)
     
     def __len__(self):
         return len(self.pair)
@@ -66,13 +80,11 @@ class MyDataset(Data.Dataset):
         x_tensor, y_tensor = self.ToTensor(m_img, f_img)
         return x_tensor, y_tensor        
                     
-train_loader = Data.DataLoader(dataset=MyDataset(root+'reg_x.npy'),
+train_loader = Data.DataLoader(dataset=MyDataset(x_list),
                                batch_size=batch_size, shuffle=True)
 
-#%%
-#for step,[x,y] in enumerate(train_loader):
-#    pass
-
+#test_loader = Data.DataLoader(dataset=MyDataset(y_list),
+#                              batch_size=1,shuffle=False)
 #%%
 print('Initializing model...')    
 
@@ -310,9 +322,14 @@ for epoch in range(num_epoch):
                 reg_img = warp.detach().cpu().numpy()
                 
                 plt.figure(figsize=(18,15))
+                # train
                 plt.subplot(1,3,1),plt.imshow(cw90(fix_img[0,0,:,:]),cmap='gray'),plt.title('Fixed image')
                 plt.subplot(1,3,2),plt.imshow(cw90(reg_img[0,0,:,:]),cmap='gray'),plt.title('Registered')
                 plt.subplot(1,3,3),plt.imshow(cw90(mov_img[0,0,:,:]),cmap='gray'),plt.title('Moving image')
+                # test
+#                plt.subplot(2,3,4),plt.imshow(cw90(fix_img[0,0,:,:]),cmap='gray'),plt.title('Fixed image')
+#                plt.subplot(2,3,5),plt.imshow(cw90(reg_img[0,0,:,:]),cmap='gray'),plt.title('Registered')
+#                plt.subplot(2,3,6),plt.imshow(cw90(mov_img[0,0,:,:]),cmap='gray'),plt.title('Moving image')
                 plt.show()
         
     scheduler.step()

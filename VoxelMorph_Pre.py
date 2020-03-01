@@ -18,10 +18,8 @@ import matplotlib.pyplot as plt
 global num_frame, im_size,num_volume
 num_frame = 5
 im_size = 512
-num_volume = 1
-
 dataroot = '/sdc/MiceData/'
-saveroot = '/home/hud4/Desktop/2020/Data/'
+saveroot = '/home/hud4/Desktop/2020/VoxelMorph/Prepared_Volumes/'
 
 x_list = []
 
@@ -30,9 +28,6 @@ for file in os.listdir(dataroot):
         x_list.append(file)
 
 x_list.sort()
-
-x_volume = x_list[:num_volume]
-
 
 #%%
 def nii_loader(dir,file):
@@ -68,10 +63,9 @@ def cw90(img):
         vector = np.transpose(img[i,:])
         opt[:,r-i-1] = vector
     return opt
-            
-data = nii_loader(dataroot,x_list[0])
-v = PickFrame(data, num_frame)
 
-plt.imshow(cw90(v[:,:,0]),cmap='gray')
 
-np.save(saveroot+'reg_x.npy',v)
+for i in range(len(x_list)):
+    data = nii_loader(dataroot,x_list[i])
+    v = PickFrame(data, num_frame)
+    np.save(saveroot+'reg_{}.npy'.format(i),v)
