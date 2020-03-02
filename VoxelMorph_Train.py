@@ -83,8 +83,9 @@ class MyDataset(Data.Dataset):
 train_loader = Data.DataLoader(dataset=MyDataset(x_list),
                                batch_size=batch_size, shuffle=True)
 
-#test_loader = Data.DataLoader(dataset=MyDataset(y_list),
-#                              batch_size=1,shuffle=False)
+test_loader = Data.DataLoader(dataset=MyDataset(y_list),
+                              batch_size=1,shuffle=False)
+
 #%%
 print('Initializing model...')    
 
@@ -333,7 +334,48 @@ for epoch in range(num_epoch):
                 plt.show()
         
     scheduler.step()
-                
+
+#%% Save model as GPU version
+modelroot = '/home/hud4/Desktop/2020/Model/'
+G_name = 'VoxelMorph.pt'
+torch.save(model.state_dict(), modelroot+G_name)
+         
+#%% Test
+pack_warp = []
+pack_x = []
+pack_y = []
+
+for step, [m_img, f_img] in enumerate(test_loader):
+    model.eval()
+    
+    if step >= 2000 and step < 2010:
+        x = Variable(m_img).to(device)
+        y = Variable(f_img).to(device)
+        warp,_ = model(x,y)
         
-            
+        pack_warp.append(warp.detach().cpu().numpy())
+        pack_y.append(y.detach().cpu().numpy())
+        pack_x.append(x.detach().cpu().numpy())
+        
+reg_x = np.zeros([10,512,512],dtype=np.uint8)
+reg_y = np.zeros([10,512,512],dtype=np.uint8)
+reg_warp = np.zeros([10,512,512],dtype=np.uint8)
+
+for i in range(10):
+    tensor_warp = pack_warp[i]
+    tensor_y = pack_y[i]
+    tensor_x = pack_x[i]
+    reg_warp[i,:,:] = np.fliplr(tensor_warp[0,0,:,:])        
+    reg_y[i,:,:] = np.fliplr(tensor_y[0,0,:,:])
+    reg_x[i,:,:] = np.fliplr(tensor_x[0,0,:,:])
+
+
+import nibabel as nib
+def save_nii(volume,path,filename):
+    output = nib.Nifti1Image(volume,np.eye(4))
+    nib.save(output,os.path.join(path,filename))
+    
+save_nii(reg_warp,'/home/hud4/Desktop/','reg_warp.nii.gz')
+save_nii(reg_y,'/home/hud4/Desktop/','reg_y.nii.gz')
+save_nii(reg_x,'/home/hud4/Desktop/','reg_x.nii.gz')
 
