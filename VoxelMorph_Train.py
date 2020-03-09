@@ -29,7 +29,7 @@ device = torch.device("cuda:0" if( torch.cuda.is_available() and gpu>0 ) else "c
 
 global radius, root, num_volume
 
-radius = 5
+radius = 7
 num_volume = 8
 root = '/home/hud4/Desktop/2020/VoxelMorph/Prepared_Volumes/'
 
@@ -46,7 +46,7 @@ y_list = namelist[num_volume:]
 #%% Dataloader
 print('Creating dataset...')
 
-batch_size = 5
+batch_size = 20
 
 class MyDataset(Data.Dataset):
     
@@ -303,7 +303,7 @@ for epoch in range(num_epoch):
         
         recon_loss = sim_loss_fn(warp, y)
         grad_loss = grad_loss_fn(flow)
-        loss = recon_loss + reg_param*grad_loss
+        loss = recon_loss #+ reg_param*grad_loss
         
         if step % 500 == 0:
             print("[%d/%d]\t[%d/%d]\tLoss:%f\tSIM_Loss:%f\tSM_Loss:%f" %(epoch,num_epoch,step,len(train_loader),
@@ -348,7 +348,7 @@ pack_y = []
 for step, [m_img, f_img] in enumerate(test_loader):
     model.eval()
     
-    if step >= 2000 and step < 2010:
+    if step >= 1500 and step < 1515:
         x = Variable(m_img).to(device)
         y = Variable(f_img).to(device)
         warp,_ = model(x,y)
@@ -357,11 +357,11 @@ for step, [m_img, f_img] in enumerate(test_loader):
         pack_y.append(y.detach().cpu().numpy())
         pack_x.append(x.detach().cpu().numpy())
         
-reg_x = np.zeros([10,512,512],dtype=np.uint8)
-reg_y = np.zeros([10,512,512],dtype=np.uint8)
-reg_warp = np.zeros([10,512,512],dtype=np.uint8)
+reg_x = np.zeros([2*radius,512,512],dtype=np.uint8)
+reg_y = np.zeros([2*radius,512,512],dtype=np.uint8)
+reg_warp = np.zeros([2*radius,512,512],dtype=np.uint8)
 
-for i in range(10):
+for i in range(2*radius):
     tensor_warp = pack_warp[i]
     tensor_y = pack_y[i]
     tensor_x = pack_x[i]
@@ -375,7 +375,15 @@ def save_nii(volume,path,filename):
     output = nib.Nifti1Image(volume,np.eye(4))
     nib.save(output,os.path.join(path,filename))
     
-save_nii(reg_warp,'/home/hud4/Desktop/','reg_warp.nii.gz')
-save_nii(reg_y,'/home/hud4/Desktop/','reg_y.nii.gz')
-save_nii(reg_x,'/home/hud4/Desktop/','reg_x.nii.gz')
+save_nii(reg_warp,'/home/hud4/Desktop/regi_result/','reg_warp.nii.gz')
+save_nii(reg_y,'/home/hud4/Desktop/regi_result/','reg_y.nii.gz')
+save_nii(reg_x,'/home/hud4/Desktop/regi_result/','reg_x.nii.gz')
 
+#%%
+from PIL import Image
+for i in range(2*radius):
+    im = Image.fromarray(reg_warp[i,:,:])
+    im.save('/home/hud4/Desktop/regi_result/atlas{}.tif'.format(i))
+#%%
+y = Image.fromarray(reg_y[0,:,:])
+y.save('/home/hud4/Desktop/regi_result/fix_img.tif')
