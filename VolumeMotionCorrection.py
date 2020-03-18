@@ -62,7 +62,7 @@ def save_nii(volume,path,filename):
     output = nib.Nifti1Image(volume,np.eye(4))
     nib.save(output,os.path.join(path,filename))
 
-radius = 7
+radius = 5
 root = 'E:\\Temp\\'
 fixedImageFile = root+'fix_img.nii.gz'
 movingImageFile = root+'mov_img.nii.gz'
@@ -72,25 +72,36 @@ pair = ()
 t1 = time.time()
 dim = data.shape
 for i in range(dim[0]):
-    if i >= radius and i <= dim[0]-radius:
+    if i >= radius and i < dim[0]-radius:
         y = data[i,:,:]
         save_nii(y,root,'fix_img.nii.gz')
         pair = pair + ((y,y),)
         for j in range(radius):
             dist = j+1
-            x_pre = data[i-dist,:,:]
-            save_nii(x_pre,root,'mov_img.nii.gz')
+            frame_x = data[i-dist,:,:]
+            save_nii(frame_x,root,'mov_img.nii.gz')
             MotionCorrection.MotionCorrect(fixedImageFile,movingImageFile,outputImageFile)
-            x_pre = load_nii(outputImageFile)
+            x_pre = np.zeros([1024,512],dtype=np.float32)
+            x_pre[:,:500] = load_nii(outputImageFile)
             
-            x_post = data[i+dist,:,:]
-            save_nii(x_pre,root,'mov_img.nii.gz')
+            frame_x = data[i+dist,:,:]
+            save_nii(frame_x,root,'mov_img.nii.gz')
             MotionCorrection.MotionCorrect(fixedImageFile,movingImageFile,outputImageFile)
-            x_post = load_nii(outputImageFile)
+            x_post = np.zeros([1024,512],dtype=np.float32)
+            x_post[:,:500] = load_nii(outputImageFile)
+            
             pair = pair + ((x_pre,y),(x_post,y),)
+    
+    if i % 20 == 0 :
+        print('{} slices have been completed'.format(i))
+
 t2 = time.time()
 print('Time:{} min'.format((t2-t1)/60))
 
-
+#%% Save the aligned data
+import pickle
+with open('E:\\VoxelMorph\\pair.pickle','wb') as f:
+    pickle.dump(pair,f)
+    
     
     
