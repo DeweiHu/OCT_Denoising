@@ -46,7 +46,7 @@ for file in os.listdir(volumeroot):
         volumelist.append(file)
 volumelist.sort()
 
-volume = Rescale(io.imread(volumeroot+volumelist[0]))
+volume = Rescale(io.imread(volumeroot+volumelist[18]))
 data = PickFrame(volume)
 
 #plt.imshow(data[100,:,:],cmap='gray')
@@ -62,7 +62,7 @@ def save_nii(volume,path,filename):
     output = nib.Nifti1Image(volume,np.eye(4))
     nib.save(output,os.path.join(path,filename))
 
-radius = 5
+radius = 7
 root = 'E:\\Temp\\'
 fixedImageFile = root+'fix_img.nii.gz'
 movingImageFile = root+'mov_img.nii.gz'
@@ -73,9 +73,8 @@ t1 = time.time()
 dim = data.shape
 for i in range(dim[0]):
     if i >= radius and i < dim[0]-radius:
-        y = data[i,:,:]
-        save_nii(y,root,'fix_img.nii.gz')
-        pair = pair + ((y,y),)
+        fix = data[i,:,:] 
+        save_nii(fix,root,'fix_img.nii.gz')
         for j in range(radius):
             dist = j+1
             frame_x = data[i-dist,:,:]
@@ -90,8 +89,11 @@ for i in range(dim[0]):
             x_post = np.zeros([1024,512],dtype=np.float32)
             x_post[:,:500] = load_nii(outputImageFile)
             
+            y = np.zeros([1024,512],dtype=np.float32)
+            y[:,:500] = fix
             pair = pair + ((x_pre,y),(x_post,y),)
-    
+        pair = pair + ((y,y),)
+        
     if i % 20 == 0 :
         print('{} slices have been completed'.format(i))
 
@@ -100,7 +102,7 @@ print('Time:{} min'.format((t2-t1)/60))
 
 #%% Save the aligned data
 import pickle
-with open('E:\\VoxelMorph\\pair.pickle','wb') as f:
+with open('E:\\VoxelMorph\\test_pair.pickle','wb') as f:
     pickle.dump(pair,f)
     
     
