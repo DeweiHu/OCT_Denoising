@@ -42,4 +42,11 @@ with open(root+'x.pickle','rb') as f:
     mov = pickle.load(f)
 
 nii_save(mov,root,'mov_img.nii.gz')
-    
+
+#%%
+from skimage import io
+im_smooth = io.imread(root+'synthResult.tif')
+
+
+
+
