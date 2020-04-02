@@ -51,7 +51,7 @@ class MyDataset(Data.Dataset):
                                 MyFunctions.ImageRescale(mask,[0,1]))
         return x_tensor, y_tensor
     
-train_loader = Data.DataLoader(dataset=MyDataset(root+'Retina1_train.pickle'), 
+train_loader = Data.DataLoader(dataset=MyDataset(root+'Retina2_train.pickle'), 
                                batch_size=batch_size, shuffle=True)
 
 device = torch.device("cuda:0" if( torch.cuda.is_available() and gpu>0 ) else "cpu")
@@ -174,7 +174,7 @@ class Generator(nn.Module):
         return output
         
 netG = Generator(gpu).to(device)
-netG.apply(weight_init)
+#netG.apply(weight_init)
 
 #%% Discriminator Architecture
 class Discriminator(nn.Module):
@@ -211,7 +211,13 @@ class Discriminator(nn.Module):
         return output
 
 netD = Discriminator(gpu).to(device)
-netD.apply(weight_init)
+#netD.apply(weight_init)
+
+modelroot = 'E:\\Model\\'
+G_name = 'SF_cGAN_generator.pt'
+D_name = 'SF_cGAN_discriminator.pt'
+netG.load_state_dict(torch.load(modelroot+G_name))
+netD.load_state_dict(torch.load(modelroot+D_name))
 
 #%% Loss functions and optimizers
 BCE_loss = nn.BCELoss()
@@ -324,9 +330,14 @@ for epoch in range(num_epoch):
 #                    avg_test = test_y.numpy()
                 
                 plt.figure(figsize=(18,15))
-                plt.subplot(1,3,1),plt.imshow(noise_train[0,0,:,:],cmap='gray'),plt.title('noisy')
-                plt.subplot(1,3,2),plt.imshow(denoise_train[0,0,:,:],cmap='gray'),plt.title('denoised')
-                plt.subplot(1,3,3),plt.imshow(avg_train[0,0,:,:],cmap='gray'),plt.title('5-average')
+                plt.subplot(1,4,1),plt.axis('off'),
+                plt.imshow(noise_train[0,0,:,:],cmap='gray'),plt.title('noisy')
+                plt.subplot(1,4,2),plt.axis('off'),
+                plt.imshow(noise_train[0,2,:,:],cmap='gray'),plt.title('self-fused')
+                plt.subplot(1,4,3),plt.axis('off'),
+                plt.imshow(denoise_train[0,0,:,:],cmap='gray'),plt.title('denoised')
+                plt.subplot(1,4,4),plt.axis('off'),
+                plt.imshow(avg_train[0,0,:,:],cmap='gray'),plt.title('5-average')
             
 #                plt.subplot(2,3,4),plt.imshow(cw90(noise_test[0,0,:,:]),cmap='gray'),plt.title('noisy')
 #                plt.subplot(2,3,5),plt.imshow(cw90(denoise_test[0,0,:,:]),cmap='gray'),plt.title('denoised')
@@ -344,8 +355,8 @@ t2 = time.time()
 print('Time used:',(t2-t1)/60,' min')
 
 #%% Save model as GPU version
-modelroot = 'E:\\Model\\'
-G_name = 'SF_cGAN_generator.pt'
-D_name = 'SF_cGAN_discriminator.pt'
-torch.save(netG.state_dict(), modelroot+G_name)
-torch.save(netD.state_dict(), modelroot+D_name)
+#modelroot = 'E:\\Model\\'
+#G_name = 'SF_cGAN_generator.pt'
+#D_name = 'SF_cGAN_discriminator.pt'
+#torch.save(netG.state_dict(), modelroot+G_name)
+#torch.save(netD.state_dict(), modelroot+D_name)
