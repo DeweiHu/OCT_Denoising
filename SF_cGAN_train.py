@@ -48,17 +48,13 @@ class MyDataset(Data.Dataset):
     def __getitem__(self,idx):
         (image, mask) = self.pair[idx]
         x_tensor, y_tensor = self.ToTensor(image,
-                                MyFunctions.ImageRescale(mask,[0,1]))
+                                MyFunctions.ImageRescale(mask,[0,2]))
         return x_tensor, y_tensor
     
 train_loader = Data.DataLoader(dataset=MyDataset(root+'Retina2_train.pickle'), 
                                batch_size=batch_size, shuffle=True)
 
 device = torch.device("cuda:0" if( torch.cuda.is_available() and gpu>0 ) else "cpu")
-
-#%%
-#for step,[x,y] in enumerate(train_loader):
-#    pass
 
 #%% Generator Architecture
 print('Initializing model...')
@@ -214,8 +210,8 @@ netD = Discriminator(gpu).to(device)
 #netD.apply(weight_init)
 
 modelroot = 'E:\\Model\\'
-G_name = 'SF_cGAN_generator.pt'
-D_name = 'SF_cGAN_discriminator.pt'
+G_name = 'SF_cGAN_generator_v2.pt'
+D_name = 'SF_cGAN_discriminator_v2.pt'
 netG.load_state_dict(torch.load(modelroot+G_name))
 netD.load_state_dict(torch.load(modelroot+D_name))
 
@@ -232,7 +228,7 @@ beta1 = 0.5
 lr = 1e-5
 optimizerG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1,0.999))
 optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1,0.999))
-schedulerG = StepLR(optimizerG, step_size=1, gamma=0.5)
+schedulerG = StepLR(optimizerG, step_size=1, gamma=0.3)
 schedulerD = StepLR(optimizerD, step_size=1, gamma=0.5)
 
 #%% Training 
@@ -322,26 +318,20 @@ for epoch in range(num_epoch):
                 noise_train = train_x.numpy()
                 avg_train = train_y.numpy()
             
-#                # Test data denoising
-#                for test_x, test_y in test_loader:
-#                    ipt_x = test_x.to(device)
-#                    denoise_test = netG(ipt_x).detach().cpu().numpy()
-#                    noise_test = test_x.numpy()
-#                    avg_test = test_y.numpy()
+                img_x = MyFunctions.ImageRescale(noise_train[0,0,:,:500],[0,255])
+                img_y = MyFunctions.ImageRescale(avg_train[0,0,:,:500],[0,255])
+                img_sf = MyFunctions.ImageRescale(noise_train[0,2,:,:500],[0,255])
+                img_dn = MyFunctions.ImageRescale(denoise_train[0,0,:,:500],[0,255])
                 
                 plt.figure(figsize=(18,15))
                 plt.subplot(1,4,1),plt.axis('off'),
-                plt.imshow(noise_train[0,0,:,:],cmap='gray'),plt.title('noisy')
+                plt.imshow(img_x,cmap='gray'),plt.title('noisy')
                 plt.subplot(1,4,2),plt.axis('off'),
-                plt.imshow(noise_train[0,2,:,:],cmap='gray'),plt.title('self-fused')
+                plt.imshow(img_sf,cmap='gray'),plt.title('self-fused')
                 plt.subplot(1,4,3),plt.axis('off'),
-                plt.imshow(denoise_train[0,0,:,:],cmap='gray'),plt.title('denoised')
+                plt.imshow(img_dn,cmap='gray'),plt.title('denoised')
                 plt.subplot(1,4,4),plt.axis('off'),
-                plt.imshow(avg_train[0,0,:,:],cmap='gray'),plt.title('5-average')
-            
-#                plt.subplot(2,3,4),plt.imshow(cw90(noise_test[0,0,:,:]),cmap='gray'),plt.title('noisy')
-#                plt.subplot(2,3,5),plt.imshow(cw90(denoise_test[0,0,:,:]),cmap='gray'),plt.title('denoised')
-#                plt.subplot(2,3,6),plt.imshow(cw90(avg_test[0,0,:,:]),cmap='gray'),plt.title('5-average')
+                plt.imshow(img_y,cmap='gray'),plt.title('5-average')
                 plt.show()
             
         G_losses.append(G_error.item())
@@ -355,8 +345,8 @@ t2 = time.time()
 print('Time used:',(t2-t1)/60,' min')
 
 #%% Save model as GPU version
-#modelroot = 'E:\\Model\\'
-#G_name = 'SF_cGAN_generator.pt'
-#D_name = 'SF_cGAN_discriminator.pt'
-#torch.save(netG.state_dict(), modelroot+G_name)
-#torch.save(netD.state_dict(), modelroot+D_name)
+modelroot = 'E:\\Model\\'
+G_name = 'SF_cGAN_generator_v2.pt'
+D_name = 'SF_cGAN_discriminator_v2.pt'
+torch.save(netG.state_dict(), modelroot+G_name)
+torch.save(netD.state_dict(), modelroot+D_name)
