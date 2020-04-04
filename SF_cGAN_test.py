@@ -22,7 +22,7 @@ from torch.optim.lr_scheduler import StepLR
 from torch.autograd import Variable
 
 global root
-root = 'E:\\Denoise_Train_Data\\'
+root = 'E:\\Denoise_Test_Data\\'
 
 #%% Train dataset and dataloader formation
 print('Creating dataset...')
@@ -52,7 +52,7 @@ class MyDataset(Data.Dataset):
         return x_tensor, y_tensor
     
 test_loader = Data.DataLoader(dataset=MyDataset(root+'Retina2_test.pickle'), 
-                               batch_size=batch_size, shuffle=True)
+                               batch_size=batch_size, shuffle=False)
 
 device = torch.device("cuda:0" if( torch.cuda.is_available() and gpu>0 ) else "cpu")
 
@@ -172,6 +172,11 @@ name = 'SF_cGAN_generator.pt'
 model.load_state_dict(torch.load(modelroot+name))
 
 #%% Test
+volume_x = np.zeros([486,1024,500],dtype=np.float32)
+volume_y = np.zeros([486,1024,500],dtype=np.float32)
+volume_sf = np.zeros([486,1024,500],dtype=np.float32)
+volume_dn = np.zeros([486,1024,500],dtype=np.float32)
+
 for step,[img,mask] in enumerate(test_loader):
     
     model.eval()
@@ -182,18 +187,26 @@ for step,[img,mask] in enumerate(test_loader):
         pred_y = pred_y.detach().cpu().numpy()
         x = img.numpy()
         y = mask.numpy()
-    
-        if step % 40 == 0:
+        
+        volume_x[step,:,:] = x[0,0,:,:500]
+        volume_y[step,:,:] = MyFunctions.ImageRescale(y[0,0,:,:500],[0,255])
+        volume_sf[step,:,:] = x[0,2,:,:500]
+        volume_dn[step,:,:] = MyFunctions.ImageRescale(pred_y[0,0,:,:500],[0,255])
+        
+        if step % 20 == 0:
             plt.figure(figsize=(18,15))
             plt.subplot(1,4,1),plt.axis('off'),
             plt.imshow(x[0,0,:,:],cmap='gray'),plt.title('noisy input')
             plt.subplot(1,4,2),plt.axis('off'),
-            plt.imshow(x[0,1,:,:],cmap='gray'),plt.title('gradmap')
-            plt.subplot(1,4,3),plt.axis('off'),
-            plt.imshow(y[0,0,:,:],cmap='gray'),plt.title('5-average')
+            plt.imshow(x[0,2,:,:],cmap='gray'),plt.title('self-fusion')
             plt.subplot(1,4,4),plt.axis('off'),
+            plt.imshow(y[0,0,:,:],cmap='gray'),plt.title('5-average')
+            plt.subplot(1,4,3),plt.axis('off'),
             plt.imshow(pred_y[0,0,:,:],cmap='gray'),plt.title('denoise')
             plt.show()
 
-
-
+#%% save volume
+MyFunctions.nii_saver(volume_x,root,'noisy_volume.nii.gz')
+MyFunctions.nii_saver(volume_y,root,'average_volume.nii.gz')
+MyFunctions.nii_saver(volume_sf,root,'self_fusion_volume.nii.gz')
+MyFunctions.nii_saver(volume_dn,root,'denoise_volume.nii.gz')
