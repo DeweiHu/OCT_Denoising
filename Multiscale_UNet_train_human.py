@@ -53,7 +53,10 @@ class MyDataset(Data.Dataset):
                                 MyFunctions.ImageRescale(mask,[0,1]))
         return x_tensor, y_tensor
     
-train_loader = Data.DataLoader(dataset=MyDataset(root+'Retina2_train.pickle'), 
+train_loader = Data.DataLoader(dataset=MyDataset(root+'Human_train.pickle'), 
+                               batch_size=batch_size, shuffle=True)
+
+test_loader = Data.DataLoader(dataset=MyDataset('E:\\Denoise_Test_Data\\Retina2_ONH_SNR_101_2.pickle'), 
                                batch_size=batch_size, shuffle=True)
 
 device = torch.device("cuda:0" if( torch.cuda.is_available() and gpu>0 ) else "cpu")
@@ -184,8 +187,8 @@ class UNet(nn.Module):
         
 model = UNet(gpu).to(device)
 #model.apply(weight_init)
-name = 'Multiscale_UNet_human.pt'
-model.load_state_dict(torch.load(modelroot+name))
+#name = 'Multiscale_UNet_human.pt'
+#model.load_state_dict(torch.load(modelroot+name))
 
 #%% Loss functions and optimizers
 L1_loss = nn.L1Loss()
@@ -200,13 +203,13 @@ print('Training start...')
 
 import time
 
-num_epoch = 10
+num_epoch = 2
 
 t1 = time.time()
 for epoch in range(num_epoch):
     for step,[x,y] in enumerate(train_loader):
         
-        model.train()
+#        model.train()
         
         train_x = Variable(x).to(device)        
         train_y = Variable(y).to(device)
@@ -217,26 +220,50 @@ for epoch in range(num_epoch):
         loss.backward()
         optimizer.step()
         
-        model.eval()
-        with torch.no_grad():
-            if step % 100 == 0:
-                print('[%d/%d][%d/%d]\tLoss:%.4f'
-                      %(epoch, num_epoch, step, len(train_loader),loss))
-                
-            if step % 1000 == 0:
-                noise_img = train_x.detach().cpu().numpy()
-                denoise_img = pred.detach().cpu().numpy()
-                average_img = train_y.detach().cpu().numpy()
-                
-                plt.figure(figsize=(12,12))
-                plt.subplot(1,3,1),plt.axis('off'),
-                plt.imshow(noise_img[0,0,:,:500],cmap='gray'),plt.title('noisy')
-                plt.subplot(1,3,2),plt.axis('off'),
-                plt.imshow(denoise_img[0,0,:,:500],cmap='gray'),plt.title('denoised')
-                plt.subplot(1,3,3),plt.axis('off'),
-                plt.imshow(average_img[0,0,:,:500],cmap='gray'),plt.title('5-average')
-                plt.show()
+        if step % 100 == 0:
+            print('[%d/%d][%d/%d]\tLoss:%.4f'
+                  %(epoch, num_epoch, step, len(train_loader),loss))
+            
+        if step % 1000 == 0:
+            noise_img = train_x.detach().cpu().numpy()
+            denoise_img = pred.detach().cpu().numpy()
+            average_img = train_y.detach().cpu().numpy()
+            
+            plt.figure(figsize=(12,12))
+            plt.subplot(1,3,1),plt.axis('off'),
+            plt.imshow(noise_img[0,0,:,:500],cmap='gray'),plt.title('noisy')
+            plt.subplot(1,3,2),plt.axis('off'),
+            plt.imshow(denoise_img[0,0,:,:500],cmap='gray'),plt.title('denoised')
+            plt.subplot(1,3,3),plt.axis('off'),
+            plt.imshow(average_img[0,0,:,:500],cmap='gray'),plt.title('5-average')
+            plt.show()
+    
+    scheduler.step()
+    print('//////////////////////////////////////////////////')
+    print('test...')
+#    model.eval()
+    with torch.no_grad():
+        for slc,[x,y] in enumerate(test_loader):
+            
+            if slc > 5 :
+                break
 
+            test_x = Variable(x).to(device)
+            pred_y = model(test_x)
+            
+            img_noi = x.numpy()
+            img_gt = y.numpy()
+            img_dn = pred_y.detach().cpu().numpy()
+            
+            plt.figure(figsize=(12,12))
+            plt.subplot(1,3,1),plt.axis('off'),
+            plt.imshow(img_noi[0,0,:,:500],cmap='gray'),plt.title('noisy')
+            plt.subplot(1,3,2),plt.axis('off'),
+            plt.imshow(img_dn[0,0,:,:500],cmap='gray'),plt.title('denoised')
+            plt.subplot(1,3,3),plt.axis('off'),
+            plt.imshow(img_gt[0,0,:,:500],cmap='gray'),plt.title('5-average')
+            plt.show()
+            
 #%% Save model as GPU version
 modelroot = 'E:\\Model\\'
 name = 'Multiscale_UNet_human.pt'

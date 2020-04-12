@@ -191,7 +191,7 @@ for file in os.listdir(root):
         
         for step,[img,mask] in enumerate(test_loader):
             
-            model.eval()
+#            model.eval()
             with torch.no_grad():
                 x = Variable(img).to(device)
                 pred_y = model(x)
@@ -216,3 +216,4 @@ for file in os.listdir(root):
                     
         # save volume
         MyFunctions.nii_saver(volume_dn,root,file[:-7]+'_MulUNet.nii.gz')
+
